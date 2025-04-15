@@ -1,22 +1,35 @@
 "use client";
 
+import Image from "next/image";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createClient, LiveTranscriptionEvents } from "@deepgram/sdk";
+import microphoneOff from "../public/assets/icons/microphone-off.svg";
+import microphoneOn from "../public/assets/icons/microphone-on.svg";
+import { Button } from "./ui/button";
 
 interface MicrophoneProps {
-  apiKey: string;
   sendInterval: number;
 }
 
-const Microphone = ({ apiKey, sendInterval = 250 }: MicrophoneProps) => {
+const Microphone = ({ sendInterval = 250 }: MicrophoneProps) => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
+  const [apiKey, setApiKey] = useState("");
 
   // Refs for microphone and Deepgram connection
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const deepgramConnectionRef = useRef<ReturnType<
     typeof createClient.prototype.listen.live
   > | null>(null);
+
+  useEffect(() => {
+    const fetchApi = async () => {
+      const response = await fetch("/api/deepgram-auth");
+      const data = await response.json();
+      setApiKey(data.apiKey);
+    };
+    fetchApi();
+  }, []);
 
   const stopListening = useCallback(() => {
     if (!isListening) return;
@@ -82,7 +95,8 @@ const Microphone = ({ apiKey, sendInterval = 250 }: MicrophoneProps) => {
         if (sentence) {
           // TODO: Update transcript, overwriting the previous interim result
           // If you want to accumulate, you might need more complex state logic
-          setTranscript(sentence);
+          // i want to append the sentence to the transcript
+          setTranscript(transcript + sentence);
         }
       });
 
@@ -114,7 +128,7 @@ const Microphone = ({ apiKey, sendInterval = 250 }: MicrophoneProps) => {
 
       stopListening();
     }
-  }, [isListening, apiKey, sendInterval, stopListening]);
+  }, [isListening, sendInterval, stopListening, apiKey, transcript]);
 
   // Cleanup effect when component unmounts
   useEffect(() => {
@@ -124,18 +138,22 @@ const Microphone = ({ apiKey, sendInterval = 250 }: MicrophoneProps) => {
   }, [stopListening]);
 
   return (
-    <div>
-      <h2>Real-time Transcription</h2>
-      <button onClick={isListening ? stopListening : startListening}>
-        {isListening ? "🔴 Stop Listening" : "🎤 Start Listening"}
-      </button>
-      <p>Status: {isListening ? "Listening..." : "Idle"}</p>
-      <div className="mt-4 border border-gray-300 p-4 min-h-20">
-        <p>
-          <strong>Transcript:</strong>
-        </p>
-        <p>{transcript || "..."}</p>
-      </div>
+    <div className="flex items-center justify-center">
+      <Button
+        className="min-w-9 rounded-xl bg-transparent p-2 transition-all"
+        onClick={isListening ? stopListening : startListening}
+      >
+        {isListening ? (
+          <Image src={microphoneOn} alt="microphoneOn" width={24} height={24} />
+        ) : (
+          <Image
+            src={microphoneOff}
+            alt="microphoneOff"
+            width={24}
+            height={24}
+          />
+        )}
+      </Button>
     </div>
   );
 };
