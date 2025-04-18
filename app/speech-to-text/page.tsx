@@ -1,14 +1,16 @@
-import Microphone from "@/components/Microphone";
+// "use client";
 
-const page = () => {
+import Microphone from "@/components/Microphone";
+// import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+
+const Page = () => {
+  // const [editor] = useLexicalComposerContext();
+
   return (
     <div>
-      <Microphone
-        apiKey={process.env.DEEPGRAM_API_KEY as string}
-        sendInterval={250}
-      />
+      <Microphone sendInterval={250} />
     </div>
   );
 };
 
-export default page;
+export default Page;

@@ -18,9 +18,7 @@ const Microphone = ({ sendInterval = 250 }: MicrophoneProps) => {
 
   // Refs for microphone and Deepgram connection
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const deepgramConnectionRef = useRef<ReturnType<
-    typeof createClient.prototype.listen.live
-  > | null>(null);
+  const deepgramConnectionRef = useRef<ReturnType<typeof createClient.prototype.listen.live> | null>(null);
 
   useEffect(() => {
     const fetchApi = async () => {
@@ -41,17 +39,11 @@ const Microphone = ({ sendInterval = 250 }: MicrophoneProps) => {
     }
 
     // 2. Stop the MediaRecorder
-    if (
-      mediaRecorderRef.current &&
-      mediaRecorderRef.current.state === "recording"
-    )
-      mediaRecorderRef.current.stop();
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") mediaRecorderRef.current.stop();
 
     // 3. Stop microphone tracks (important!)
     if (mediaRecorderRef.current && mediaRecorderRef.current.stream) {
-      mediaRecorderRef.current.stream
-        .getTracks()
-        .forEach((track) => track.stop());
+      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
     }
 
     // 4. Clean up refs and state
@@ -80,10 +72,7 @@ const Microphone = ({ sendInterval = 250 }: MicrophoneProps) => {
       // --- Deepgram Event Listeners ---
       connection.on(LiveTranscriptionEvents.Open, () => {
         recorder.ondataavailable = (event) => {
-          if (
-            event.data.size > 0 &&
-            connection.getReadyState() === 1 /* OPEN */
-          ) {
+          if (event.data.size > 0 && connection.getReadyState() === 1 /* OPEN */) {
             connection.send(event.data);
           }
         };
@@ -92,19 +81,11 @@ const Microphone = ({ sendInterval = 250 }: MicrophoneProps) => {
 
       connection.on(LiveTranscriptionEvents.Transcript, (data) => {
         const sentence = data.channel.alternatives[0].transcript;
-        if (sentence) {
-          // TODO: Update transcript, overwriting the previous interim result
-          // If you want to accumulate, you might need more complex state logic
-          // i want to append the sentence to the transcript
-          setTranscript(transcript + sentence);
-        }
+        if (sentence) setTranscript(sentence);
       });
 
       connection.on(LiveTranscriptionEvents.Error, (error: any) => {
         console.error("Deepgram Error:", error);
-        setTranscript(
-          `Error: ${(error as Error).message || "Deepgram connection error"}`
-        );
         stopListening();
       });
 
@@ -119,39 +100,20 @@ const Microphone = ({ sendInterval = 250 }: MicrophoneProps) => {
       setIsListening(true);
     } catch (error) {
       console.error("Error accessing microphone or starting Deepgram:", error);
-      setTranscript(
-        `Error: ${
-          (error as Error).message ||
-          "Could not access microphone or connect to Deepgram."
-        }`
-      );
-
       stopListening();
     }
-  }, [isListening, sendInterval, stopListening, apiKey, transcript]);
+  }, [isListening, sendInterval, stopListening, apiKey]);
 
   // Cleanup effect when component unmounts
-  useEffect(() => {
-    return () => {
-      stopListening();
-    };
-  }, [stopListening]);
+  useEffect(() => () => stopListening(), [stopListening]);
 
   return (
     <div className="flex items-center justify-center">
-      <Button
-        className="min-w-9 rounded-xl bg-transparent p-2 transition-all"
-        onClick={isListening ? stopListening : startListening}
-      >
+      <Button className="min-w-9 rounded-xl bg-transparent p-2 transition-all" onClick={isListening ? stopListening : startListening}>
         {isListening ? (
           <Image src={microphoneOn} alt="microphoneOn" width={24} height={24} />
         ) : (
-          <Image
-            src={microphoneOff}
-            alt="microphoneOff"
-            width={24}
-            height={24}
-          />
+          <Image src={microphoneOff} alt="microphoneOff" width={24} height={24} />
         )}
       </Button>
     </div>
