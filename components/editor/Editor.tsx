@@ -9,8 +9,8 @@ import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
-import { useEffect } from "react";
-import { LexicalComposerContextWithEditor, useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { useCallback } from "react";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 
 import { FloatingComposer, FloatingThreads, liveblocksConfig, LiveblocksPlugin, useEditorStatus } from "@liveblocks/react-lexical";
 import Microphone from "../Microphone";
@@ -20,11 +20,7 @@ import FloatingToolbarPlugin from "./plugins/FloatingToolbarPlugin";
 import { useThreads } from "@liveblocks/react/suspense";
 import Comments from "../Comments";
 import { DeleteModal } from "../DeleteModal";
-import { LexicalEditor, LexicalNode, RootNode } from "lexical";
-
-// Catch any errors that occur during Lexical updates and log them
-// or throw them as needed. If you don't throw them, Lexical will
-// try to recover gracefully without losing user data.
+import { $getRoot, $createTextNode, $getSelection, ParagraphNode, RootNode, TextNode, $isRangeSelection } from "lexical";
 
 function Placeholder() {
   return <div className="editor-placeholder">Enter some rich text...</div>;
@@ -55,32 +51,61 @@ export function Editor({ roomId, currentUserType }: { roomId: string; currentUse
 function EditorContent({ roomId, currentUserType, status, threads }: { roomId: string; currentUserType: UserType; status: any; threads: any }) {
   const [editor] = useLexicalComposerContext();
 
-  const setTextContent = (newText: string) => {
-    editor.update(() => {
-      const values = editor.getEditorState()._nodeMap.values();
-      const valueArray = Array.from(values);
+  const handleTranscriptUpdate = useCallback(
+    (newText: string) => {
+      if (!newText) return;
 
-      if (valueArray.length == 3) {
-        const textNode = valueArray[valueArray.length - 1] as any;
+      editor.update(() => {
+        const selection = $getSelection();
+        const root = $getRoot();
+        const transcriptSegment = " " + newText; // Add a space for better flow
 
-        const currentTextContent = textNode.getTextContent();
+        if ($isRangeSelection(selection)) {
+          // If there's a selection (cursor is active or text is highlighted),
+          // insert the transcript text at that position.
+          selection.insertText(transcriptSegment);
+        } else {
+          // If there's no active selection, append to the end of the document.
+          const lastNode = root.getLastDescendant();
 
-        textNode.setTextContent(currentTextContent + newText);
-        textNode.selectEnd();
-      }
-    });
-  };
-
-  useEffect(() => {
-    setTextContent("");
-  });
+          if (lastNode instanceof TextNode) {
+            // Append to the last text node if possible
+            lastNode.setTextContent(lastNode.getTextContent() + transcriptSegment);
+            lastNode.selectEnd(); // Move cursor after inserted text
+          } else {
+            // Otherwise, create a new paragraph with the text node
+            let targetNode: ParagraphNode | RootNode;
+            if (lastNode instanceof ParagraphNode && lastNode.getTextContentSize() === 0) {
+              // If last node is an empty paragraph, use it
+              targetNode = lastNode;
+            } else if (lastNode instanceof ParagraphNode) {
+              // If last node is a paragraph with content, append text node to it
+              const textNode = $createTextNode(transcriptSegment);
+              lastNode.append(textNode);
+              lastNode.selectEnd();
+              return; // Exit early as we've handled it
+            } else {
+              // Otherwise append a new paragraph to the root
+              const newParagraph = new ParagraphNode();
+              root.append(newParagraph);
+              targetNode = newParagraph;
+            }
+            const textNode = $createTextNode(transcriptSegment);
+            targetNode.append(textNode);
+            targetNode.selectEnd(); // Move cursor to end of new paragraph
+          }
+        }
+      });
+    },
+    [editor]
+  );
 
   return (
     <div className="editor-container">
       <div className="flex justify-center items-center">
         <div className="toolbar-wrapper sm:max-w-[80%] flex justify-between">
           <ToolbarPlugin />
-          <Microphone sendInterval={250} />
+          <Microphone sendInterval={250} onTranscriptUpdate={handleTranscriptUpdate} />
           {currentUserType === "editor" && <DeleteModal roomId={roomId} />}
         </div>
       </div>

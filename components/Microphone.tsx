@@ -9,11 +9,11 @@ import { Button } from "./ui/button";
 
 interface MicrophoneProps {
   sendInterval: number;
+  onTranscriptUpdate: (transcript: string) => void;
 }
 
-const Microphone = ({ sendInterval = 250 }: MicrophoneProps) => {
+const Microphone = ({ sendInterval = 250, onTranscriptUpdate }: MicrophoneProps) => {
   const [isListening, setIsListening] = useState(false);
-  const [transcript, setTranscript] = useState("");
   const [apiKey, setApiKey] = useState("");
 
   // Refs for microphone and Deepgram connection
@@ -22,9 +22,19 @@ const Microphone = ({ sendInterval = 250 }: MicrophoneProps) => {
 
   useEffect(() => {
     const fetchApi = async () => {
-      const response = await fetch("/api/deepgram-auth");
-      const data = await response.json();
-      setApiKey(data.apiKey);
+      try {
+        const response = await fetch("/api/deepgram-auth"); // Ensure this endpoint exists and works
+        if (!response.ok) {
+          throw new Error(`API fetch failed: ${response.statusText}`);
+        }
+        const data = await response.json();
+        if (!data.apiKey) {
+          console.warn("Deepgram API key not received from backend.");
+        }
+        setApiKey(data.apiKey);
+      } catch (error) {
+        console.error("Failed to fetch Deepgram API key:", error);
+      }
     };
     fetchApi();
   }, []);
@@ -52,36 +62,56 @@ const Microphone = ({ sendInterval = 250 }: MicrophoneProps) => {
   }, [isListening]);
 
   const startListening = useCallback(async () => {
-    if (isListening) return;
-
-    setTranscript("");
+    // Prevent starting if already listening or API key isn't ready
+    if (isListening || !apiKey) {
+      if (!apiKey) console.error("Cannot start listening: Deepgram API key is missing.");
+      return;
+    }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" }); // Adjust mimeType if needed
+
+      // Determine a suitable mimeType, 'audio/webm' is common
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "audio/ogg;codecs=opus"; // Fallback, check browser compatibility
+      console.log(`Using mimeType: ${mimeType}`);
+
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder; // Store ref immediately
 
       const deepgram = createClient(apiKey);
       const connection = deepgram.listen.live({
         model: "nova-3",
         language: "en-US",
         smart_format: true,
-        interim_results: true,
+        interim_results: true, // Keep true for real-time feedback
         punctuate: true,
+        // encoding: 'opus', // Add encoding if needed based on mimeType/Deepgram requirements
+        // sample_rate: 16000, // Specify if needed
       });
+      deepgramConnectionRef.current = connection; // Store ref immediately
 
       // --- Deepgram Event Listeners ---
       connection.on(LiveTranscriptionEvents.Open, () => {
+        console.log("Deepgram connection opened. Starting MediaRecorder.");
         recorder.ondataavailable = (event) => {
-          if (event.data.size > 0 && connection.getReadyState() === 1 /* OPEN */) {
+          if (event.data.size > 0 && connection.getReadyState() === 1 /* WebSocket.OPEN */) {
             connection.send(event.data);
           }
         };
+        // Start recording and sending data chunks periodically
         recorder.start(sendInterval);
       });
 
       connection.on(LiveTranscriptionEvents.Transcript, (data) => {
         const sentence = data.channel.alternatives[0].transcript;
-        if (sentence) setTranscript(sentence);
+
+        if (sentence && data.is_final) {
+          onTranscriptUpdate(sentence); // Pass the final transcript up
+        }
       });
 
       connection.on(LiveTranscriptionEvents.Error, (error: any) => {
@@ -89,22 +119,21 @@ const Microphone = ({ sendInterval = 250 }: MicrophoneProps) => {
         stopListening();
       });
 
-      connection.on(LiveTranscriptionEvents.Close, (event) => {
-        stopListening();
-      });
+      connection.on(LiveTranscriptionEvents.Close, () => stopListening());
 
-      // Store references
-      mediaRecorderRef.current = recorder;
-      deepgramConnectionRef.current = connection;
+      recorder.onerror = (event) => {
+        console.error("MediaRecorder error:", event);
+        stopListening();
+      };
 
       setIsListening(true);
     } catch (error) {
       console.error("Error accessing microphone or starting Deepgram:", error);
       stopListening();
     }
-  }, [isListening, sendInterval, stopListening, apiKey]);
+  }, [isListening, sendInterval, stopListening, apiKey, onTranscriptUpdate]);
 
-  // Cleanup effect when component unmounts
+  // Clean up after component dismounts
   useEffect(() => () => stopListening(), [stopListening]);
 
   return (
