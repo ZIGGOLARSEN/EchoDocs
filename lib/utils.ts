@@ -94,3 +94,23 @@ export function getUserColor(userId: string) {
   const colorIndex = sum % brightColors.length;
   return brightColors[colorIndex];
 }
+
+
+export const subscriptionPlans = [
+  {
+    planName: "Basic",
+    price: 10,
+    features: ["5 Projects", "Basic Analytics", "Limited Support", "1 User"],
+  },
+  {
+    planName: "Pro",
+    price: 29,
+    features: ["Unlimited Projects", "Advanced Analytics", "Priority Support", "5 Users", "API Access"],
+    isPopular: true,
+  },
+  {
+    planName: "Enterprise",
+    price: 99,
+    features: ["Unlimited Projects", "Advanced Analytics", "Dedicated Support", "Unlimited Users", "API Access", "Custom Integrations"],
+  },
+];
